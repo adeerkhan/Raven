@@ -173,6 +173,17 @@ async def _report_redirect(response: httpx.Response) -> None:
         )
 
 
+def _configured_cwd(cfg) -> str | None:
+    """The stdio server's working directory, or ``None`` for the default.
+
+    ``isinstance`` rather than truthiness: a stub configuration whose
+    ``cwd`` was never set answers with a mock, and handing that to the SDK
+    turns a test into a validation error about a field nobody configured.
+    """
+    value = getattr(cfg, "cwd", "")
+    return value if isinstance(value, str) and value else None
+
+
 @asynccontextmanager
 async def open_mcp_transport(
     cfg,
@@ -194,19 +205,15 @@ async def open_mcp_transport(
         from mcp.client.streamable_http import streamable_http_client
 
         if transport_type == "stdio":
+            cwd = _configured_cwd(cfg)
             if executor is not None and executor.supports_process_spawning:
-                if getattr(cfg, "cwd", ""):
-                    raise ValueError(
-                        "this MCP server needs a working directory, which the sandboxed "
-                        "executor cannot set for a spawned process"
-                    )
-                read, write = await executor.start_process(cfg.command, cfg.args, env=cfg.env or None)
+                read, write = await executor.start_process(cfg.command, cfg.args, env=cfg.env or None, cwd=cwd)
             else:
                 params = StdioServerParameters(
                     command=cfg.command,
                     args=cfg.args,
                     env=cfg.env or None,
-                    cwd=getattr(cfg, "cwd", "") or None,
+                    cwd=cwd,
                 )
                 read, write = await stack.enter_async_context(stdio_client(params))
         elif transport_type == "sse":
