@@ -195,9 +195,19 @@ async def open_mcp_transport(
 
         if transport_type == "stdio":
             if executor is not None and executor.supports_process_spawning:
+                if getattr(cfg, "cwd", ""):
+                    raise ValueError(
+                        "this MCP server needs a working directory, which the sandboxed "
+                        "executor cannot set for a spawned process"
+                    )
                 read, write = await executor.start_process(cfg.command, cfg.args, env=cfg.env or None)
             else:
-                params = StdioServerParameters(command=cfg.command, args=cfg.args, env=cfg.env or None)
+                params = StdioServerParameters(
+                    command=cfg.command,
+                    args=cfg.args,
+                    env=cfg.env or None,
+                    cwd=getattr(cfg, "cwd", "") or None,
+                )
                 read, write = await stack.enter_async_context(stdio_client(params))
         elif transport_type == "sse":
 
